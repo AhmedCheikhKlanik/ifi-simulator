@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Simulateur IFI 2026 - Union pour l’Enfance</title>
+    <style>
+        .simulator-container {
+            font-family: Arial, sans-serif;
+            background-color: #f5f8f7;
+            color: #043f47;
+            width: 100%;
+            padding: 2rem;
+
+        }
+
+        h1 {
+            font-family: Montserrat, Arial, sans-serif;
+            text-align: center;
+            color: #0A6F71;
+            margin-bottom: 1.5rem;
+            font-weight: 600;
+            font-size: 36px
+        }
+
+        .simulator {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            max-width: 600px;
+            margin: auto;
+        }
+
+        label {
+            display: block;
+            margin-bottom: .5rem;
+            font-weight: 700;
+        }
+
+        input {
+            width: 100%;
+            padding: .75rem;
+            margin-bottom: 1rem;
+            border: 1px solid #ccc;
+            border-radius: 100px 100px 100px 100px;
+            font-size: 1rem;
+            border-radius: 100px;
+        }
+
+
+        button {
+            border: none;
+            padding: .75rem 1.5rem;
+            border-radius: 100px;
+            cursor: pointer;
+            width: 100%;
+            font-size: 13px;
+            margin-bottom: 1rem;
+            border: 1px solid transparent;
+        }
+
+        .calculateButton {
+            width: 350px;
+            left: 50%;
+            position: relative;
+            transform: translate(-50%, 10px);
+        }
+
+        .greenButton,
+        .greenButton:focus {
+            background: #007b83 !important;
+            color: #fff;
+            opacity: 0.9;
+        }
+
+        .greenButton:hover {
+            color: #fff;
+            opacity: 1;
+        }
+
+        .yellowButton,
+        .yellowButton:focus {
+            background: #F7BE47;
+            color: #fff;
+            opacity: 0.9;
+        }
+
+        .yellowButton:hover {
+            background: #F7BE47;
+            opacity: 1;
+        }
+
+        .btn-row {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            margin-top: 2rem;
+        }
+
+        .btn-row button {
+            max-width: 246px;
+        }
+
+        .result {
+            margin-top: 1.5rem;
+            padding: 1rem;
+            background: #e8f5f3;
+            border-radius: 8px;
+        }
+
+        .result p {
+            margin: .5rem 0;
+        }
+
+        hr {
+            border: none;
+            border-top: 1px solid #cde3e0;
+            margin: 1rem 0;
+        }
+    </style>
+</head>
+
+<div class="simulator-container">
+    <h1>Simulateur de réduction IFI 2026</h1>
+
+    <div class="simulator">
+        <label for="patrimoine">Entrez la valeur de votre patrimoine immobilier taxable (€)</label>
+        <input type="text" id="patrimoine" placeholder="Ex : 2 000 000" inputmode="numeric"
+            oninput="formatInput(this)" />
+
+        <button class="calculateButton greenButton" onclick="calculerIFI()">Calculer mon IFI et mes possibilités de
+            dons</button>
+
+        <div id="result" class="result" style="display:none;"></div>
+
+    </div>
+
+    <script>
+        // Format input with spaces as thousands separators
+        function formatInput(el) {
+            let v = el.value.replace(/\D/g, '');
+            if (!v) { el.value = ''; return; }
+            el.value = Number(v).toLocaleString('fr-FR');
+        }
+
+        function parseNumber(str) {
+            if (!str) return 0;
+            return Number(String(str).replace(/\s/g, '').replace(',', '.'));
+        }
+
+        function formatEuro(n) {
+            return Math.round(n).toLocaleString('fr-FR') + ' €';
+        }
+
+        // Compute IFI progressively by tranches (marginal rates)
+        function calculIFIProgressif(patrimoine) {
+            // Tranches définies par Victor / barème IFI (en pourcentages)
+            // On utilise les bornes : seuil d'exonération 800 000 exclu en amont
+            const tranches = [
+                { min: 800000, max: 1300000, taux: 0.005 },
+                { min: 1300000, max: 2570000, taux: 0.007 },
+                { min: 2570000, max: 5000000, taux: 0.01 },
+                { min: 5000000, max: 10000000, taux: 0.0125 },
+                { min: 10000000, max: Infinity, taux: 0.015 }
+            ];
+
+            let ifi = 0;
+            for (const t of tranches) {
+                if (patrimoine > t.min) {
+                    const taxable = Math.min(patrimoine, t.max) - t.min;
+                    ifi += taxable * t.taux;
+                }
+            }
+            return ifi;
+        }
+
+        function arrondiMillierSup(val) {
+            return Math.ceil(val / 1000) * 1000;
+        }
+
+        function calculerIFI() {
+            const raw = document.getElementById('patrimoine').value;
+            const patrimoine = parseNumber(raw);
+            const resultDiv = document.getElementById('result');
+
+            if (isNaN(patrimoine) || patrimoine <= 800000) {
+                resultDiv.innerHTML = `<p>Votre patrimoine est inférieur au seuil d’imposition IFI (800 000 €).</p>`;
+                resultDiv.style.display = 'block';
+                return;
+            }
+
+            // Calcul IFI progressif
+            const ifi = calculIFIProgressif(patrimoine);
+            const ifiRounded = Math.round(ifi);
+
+            // Don maximum : montant qui permet (dans l'idéal) d'annuler l'IFI = IFI / 0.75
+            // mais plafonné au plafond légal de réduction (66 667 € de don max déductible)
+            let donMax = ifi / 0.75;
+            if (donMax > 66667) donMax = 66667;
+            // Keep cents irrelevant; round to euros
+            donMax = Math.round(donMax);
+
+            // Variantes arrondies au millier supérieur
+            const don60 = arrondiMillierSup(donMax * 0.6);
+            const don25 = arrondiMillierSup(donMax * 0.25);
+
+            // Investissement (part déductible = 75% du don) => réduction IFI effective
+            const investMax = donMax * 0.75;
+            const invest60 = don60 * 0.75;
+            const invest25 = don25 * 0.75;
+
+            // Coût réel pour le donateur = 25% du don
+            const coutMax = donMax * 0.25;
+            const cout60 = don60 * 0.25;
+            const cout25 = don25 * 0.25;
+
+            // IFI restant après chaque don (ne peut pas être négatif)
+            const ifiApresMax = Math.max(0, ifi - investMax);
+            const ifiApres60 = Math.max(0, ifi - invest60);
+            const ifiApres25 = Math.max(0, ifi - invest25);
+
+            // Affichage avec wording exact demandé (a / b / c)
+            resultDiv.innerHTML = `
+        <p><strong>Montant estimé de votre IFI avant don :</strong> ${formatEuro(ifiRounded)}</p>
+        <hr>
+
+        <p><strong>a.</strong> Vous pouvez donner jusqu’à <strong>${formatEuro(donMax)}</strong>, et ainsi investir <strong>${formatEuro(investMax)}</strong> dans un projet de développement structurant de l'Union pour l'Enfance et diminuer votre IFI à <strong>${formatEuro(ifiApresMax)}</strong>. Soit un coût réel supplémentaire pour vous de <strong>${formatEuro(coutMax)}</strong>.</p>
+
+         <p><strong>b.</strong> Vous pouvez aussi faire un don de <strong>${formatEuro(don60)}</strong>, et ainsi investir <strong>${formatEuro(invest60)}</strong> dans un projet de développement structurant de l'Union pour l'Enfance et diminuer votre IFI à <strong>${formatEuro(ifiApres60)}</strong>. Soit un coût réel supplémentaire pour vous de <strong>${formatEuro(cout60)}</strong>.</p>
+
+        <p><strong>c.</strong> Vous pouvez enfin faire un don de <strong>${formatEuro(don25)}</strong>, et ainsi investir <strong>${formatEuro(invest25)}</strong> dans un projet de développement structurant de l'Union pour l'Enfance et diminuer votre IFI à <strong>${formatEuro(ifiApres25)}</strong>. Soit un coût réel supplémentaire pour vous de <strong>${formatEuro(cout25)}</strong>.</p>
+      
+        <div class="btn-row">
+            <button class="greenButton" id="newsletterBtn">S'abonner à la newsletter</button>
+            <button class="donButton yellowButton" onclick="window.location.href='https://don.fondation-enfance.org/don_abrites/~mon-don?reserved_choix_FA=UNIONENF';">
+                    Faire un don
+            </button>
+        </div>
+       
+        `;
+
+            resultDiv.style.display = 'block';
+
+            // Ajout de l'écouteur après le rendu du bouton
+            const newsletterBtn = document.getElementById('newsletterBtn');
+            if (newsletterBtn) {
+                newsletterBtn.onclick = function () {
+                    // Scroll 200px avant le bas de la fenêtre visible
+                    const offset = 200;
+                    const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+                    const scrollTarget = Math.max(0, maxScroll - offset);
+                    window.scrollTo({ top: scrollTarget, behavior: 'smooth' });
+                };
+            }
+        }
+    </script>
+
+
+    </body>
+
+</html>
