@@ -14,7 +14,6 @@
             font-family: Arial, sans-serif;
             color: #043f47;
             width: 100%;
-            padding: 2rem;
 
         }
 
@@ -72,7 +71,7 @@
         }
 
         .calculateButton {
-            width: 90%;
+            max-width: 358px;
             left: 50%;
             position: relative;
             transform: translate(-50%, 10px);
@@ -115,8 +114,6 @@
 
         .result {
             margin-top: 1.5rem;
-            padding: 1rem;
-            background: #e8f5f3;
             border-radius: 8px;
         }
 
@@ -165,112 +162,118 @@
     <script>
 
 
-        (function () {
-            // Format input with spaces as thousands separators
-            function formatInput(el) {
-                let v = el.value.replace(/\D/g, '');
-                if (!v) { el.value = ''; return; }
-                el.value = Number(v).toLocaleString('fr-FR');
-            }
+        // Format input with spaces as thousands separators
+        function formatInput(el) {
+            let v = el.value.replace(/\D/g, '');
+            if (!v) { el.value = ''; return; }
+            el.value = Number(v).toLocaleString('fr-FR');
+        }
 
-            function parseNumber(str) {
-                if (!str) return 0;
-                return Number(String(str).replace(/\s/g, '').replace(',', '.'));
-            }
+        function parseNumber(str) {
+            if (!str) return 0;
+            return Number(String(str).replace(/\s/g, '').replace(',', '.'));
+        }
 
-            function formatEuro(n) {
-                return Math.round(n).toLocaleString('fr-FR') + ' €';
-            }
+        function formatEuro(n) {
+            return Math.round(n).toLocaleString('fr-FR') + ' €';
+        }
 
-            // Compute IFI progressively by tranches (marginal rates)
-            function calculIFIProgressif(patrimoine) {
-                // Tranches définies par Victor / barème IFI (en pourcentages)
-                // On utilise les bornes : seuil d'exonération 800 000 exclu en amont
-                const tranches = [
-                    { min: 800000, max: 1300000, taux: 0.005 },
-                    { min: 1300000, max: 2570000, taux: 0.007 },
-                    { min: 2570000, max: 5000000, taux: 0.01 },
-                    { min: 5000000, max: 10000000, taux: 0.0125 },
-                    { min: 10000000, max: Infinity, taux: 0.015 }
-                ];
+        // Compute IFI progressively by tranches (marginal rates)
+        function calculIFIProgressif(patrimoine) {
+            // Tranches définies par Victor / barème IFI (en pourcentages)
+            // On utilise les bornes : seuil d'exonération 800 000 exclu en amont
+            const tranches = [
+                { min: 800000, max: 1300000, taux: 0.005 },
+                { min: 1300000, max: 2570000, taux: 0.007 },
+                { min: 2570000, max: 5000000, taux: 0.01 },
+                { min: 5000000, max: 10000000, taux: 0.0125 },
+                { min: 10000000, max: Infinity, taux: 0.015 }
+            ];
 
-                let ifi = 0;
-                for (const t of tranches) {
-                    if (patrimoine > t.min) {
-                        const taxable = Math.min(patrimoine, t.max) - t.min;
-                        ifi += taxable * t.taux;
-                    }
+            let ifi = 0;
+            for (const t of tranches) {
+                if (patrimoine > t.min) {
+                    const taxable = Math.min(patrimoine, t.max) - t.min;
+                    ifi += taxable * t.taux;
                 }
-                return ifi;
+            }
+            return ifi;
+        }
+
+        function arrondiMillierSup(val) {
+            return Math.ceil(val / 1000) * 1000;
+        }
+
+        function calculerIFI() {
+            const raw = document.getElementById('patrimoine').value;
+            const patrimoine = parseNumber(raw);
+            const resultDiv = document.getElementById('result');
+
+            // Imposable seulement à partir de 1 300 000 €
+            if (isNaN(patrimoine) || patrimoine < 1300001) {
+                resultDiv.innerHTML = `<p>Le montant de votre patrimoine immobilier net taxable est inférieur à <strong>1 300 001 €</strong> : vous n'êtes pas redevable de l'impôt sur la fortune immobilière.</p>`;
+                resultDiv.style.display = 'block';
+                return;
             }
 
-            function arrondiMillierSup(val) {
-                return Math.ceil(val / 1000) * 1000;
-            }
+            // Calcul IFI progressif
+            const ifi = calculIFIProgressif(patrimoine);
+            const ifiRounded = Math.round(ifi);
 
-            function calculerIFI() {
-                const raw = document.getElementById('patrimoine').value;
-                const patrimoine = parseNumber(raw);
-                const resultDiv = document.getElementById('result');
+            // Don maximum : montant qui permet (dans l'idéal) d'annuler l'IFI = IFI / 0.75
+            // mais plafonné au plafond légal de réduction (66 667 € de don max déductible)
+            let donMax = ifi / 0.75;
+            if (donMax > 66667) donMax = 66667;
+            // Keep cents irrelevant; round to euros
+            donMax = Math.round(donMax);
 
-                if (isNaN(patrimoine) || patrimoine <= 800000) {
-                    resultDiv.innerHTML = `<p>Votre patrimoine est inférieur au seuil d’imposition IFI (800 000 €).</p>`;
-                    resultDiv.style.display = 'block';
-                    return;
-                }
+            // Variantes arrondies au millier supérieur
+            const don60 = arrondiMillierSup(donMax * 0.6);
+            const don25 = arrondiMillierSup(donMax * 0.25);
 
-                // Calcul IFI progressif
-                const ifi = calculIFIProgressif(patrimoine);
-                const ifiRounded = Math.round(ifi);
+            // Investissement (part déductible = 75% du don) => réduction IFI effective
+            const investMax = donMax * 0.75;
+            const invest60 = don60 * 0.75;
+            const invest25 = don25 * 0.75;
 
-                // Don maximum : montant qui permet (dans l'idéal) d'annuler l'IFI = IFI / 0.75
-                // mais plafonné au plafond légal de réduction (66 667 € de don max déductible)
-                let donMax = ifi / 0.75;
-                if (donMax > 66667) donMax = 66667;
-                // Keep cents irrelevant; round to euros
-                donMax = Math.round(donMax);
+            // Coût réel pour le donateur = 25% du don
+            const coutMax = donMax * 0.25;
+            const cout60 = don60 * 0.25;
+            const cout25 = don25 * 0.25;
 
-                // Variantes arrondies au millier supérieur
-                const don60 = arrondiMillierSup(donMax * 0.6);
-                const don25 = arrondiMillierSup(donMax * 0.25);
+            // IFI restant après chaque don (ne peut pas être négatif)
+            const ifiApresMax = Math.max(0, ifi - investMax);
+            const ifiApres60 = Math.max(0, ifi - invest60);
+            const ifiApres25 = Math.max(0, ifi - invest25);
 
-                // Investissement (part déductible = 75% du don) => réduction IFI effective
-                const investMax = donMax * 0.75;
-                const invest60 = don60 * 0.75;
-                const invest25 = don25 * 0.75;
-
-                // Coût réel pour le donateur = 25% du don
-                const coutMax = donMax * 0.25;
-                const cout60 = don60 * 0.25;
-                const cout25 = don25 * 0.25;
-
-                // IFI restant après chaque don (ne peut pas être négatif)
-                const ifiApresMax = Math.max(0, ifi - investMax);
-                const ifiApres60 = Math.max(0, ifi - invest60);
-                const ifiApres25 = Math.max(0, ifi - invest25);
-
-                // Affichage avec wording exact demandé (a / b / c)
-                resultDiv.innerHTML = `
+            // Affichage avec wording exact demandé (a / b / c)
+            resultDiv.innerHTML = `
     <p><strong>Montant estimé de votre IFI avant don :</strong> ${formatEuro(ifiRounded)}</p>
     <hr>
 
     <h4>a) Le Don qui réduit votre IFI au maximum</h4>
-    <p>Vous pouvez donner jusqu’à <strong>${formatEuro(donMax)}</strong>, 
-    et ainsi investir <strong>${formatEuro(investMax)}</strong> dans un projet de développement structurant 
-    de l'Union pour l'Enfance et diminuer votre IFI à <strong>${formatEuro(ifiApresMax)}</strong>. 
-    Soit un coût réel supplémentaire pour vous de <strong>${formatEuro(coutMax)}</strong>.</p>
+    <p>
+        Vous pouvez donner jusqu’à <strong>${formatEuro(donMax)}</strong> 
+        pour soutenir un projet de développement structurant de l'Union pour l'Enfance 
+        et diminuer votre IFI à <strong>${formatEuro(ifiApresMax)}</strong>. 
+        Soit un coût réel supplémentaire pour vous de <strong>${formatEuro(coutMax)}</strong>.
+    </p>
 
     <h4>b) Le Don qui réduit votre IFI par plus de 2</h4>
-    <p>Vous pouvez aussi faire un don de <strong>${formatEuro(don60)}</strong>, 
-    et ainsi investir <strong>${formatEuro(invest60)}</strong> dans un projet de développement structurant 
-    de l'Union pour l'Enfance et diminuer votre IFI à <strong>${formatEuro(ifiApres60)}</strong>. 
-    Soit un coût réel supplémentaire pour vous de <strong>${formatEuro(cout60)}</strong>.</p>
+    <p>
+        Vous pouvez donner <strong>${formatEuro(don60)}</strong> 
+        pour soutenir un projet de développement structurant de l'Union pour l'Enfance 
+        et diminuer votre IFI à <strong>${formatEuro(ifiApres60)}</strong>. 
+        Soit un coût réel supplémentaire pour vous de <strong>${formatEuro(cout60)}</strong>.
+    </p>
 
-    <h4>c) Le Don qui réduit votre IFI et qui impacte marginalement vos finances / ressources</h4>
-    <p>Vous pouvez enfin faire un don de <strong>${formatEuro(don25)}</strong>, 
-    et ainsi investir <strong>${formatEuro(invest25)}</strong> dans un projet de développement structurant 
-    de l'Union pour l'Enfance et diminuer votre IFI à <strong>${formatEuro(ifiApres25)}</strong>. 
-    Soit un coût réel supplémentaire pour vous de <strong>${formatEuro(cout25)}</strong>.</p>
+    <h4>c) Le Don qui réduit votre IFI et impacte marginalement vos finances / ressources</h4>
+    <p>
+        Vous pouvez donner <strong>${formatEuro(don25)}</strong> 
+        pour soutenir un projet de développement structurant de l'Union pour l'Enfance 
+        et diminuer votre IFI à <strong>${formatEuro(ifiApres25)}</strong>. 
+        Soit un coût réel supplémentaire pour vous de <strong>${formatEuro(cout25)}</strong>.
+    </p>
 
     <div class="btn-row">
         <button class="greenButton" id="newsletterBtn">S'abonner à notre newsletter</button>
@@ -280,21 +283,20 @@
     </div>
 `;
 
+            resultDiv.style.display = 'block';
 
-                resultDiv.style.display = 'block';
+            // Ajout de l'écouteur après le rendu du bouton
+            newsletterBtn.onclick = function () {
+                const emailField = document.getElementById('email');
+                if (emailField) {
+                    emailField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    // Optionnel : mettre le focus automatiquement
+                    setTimeout(() => emailField.focus(), 500);
+                }
+            };
 
-                // Ajout de l'écouteur après le rendu du bouton
-                newsletterBtn.onclick = function () {
-                    const emailField = document.getElementById('email');
-                    if (emailField) {
-                        emailField.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        // Optionnel : mettre le focus automatiquement
-                        setTimeout(() => emailField.focus(), 500);
-                    }
-                };
+        }
 
-            }
-        })();
     </script>
 
 
