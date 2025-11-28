@@ -12,7 +12,6 @@
 
         .simulator-container {
             font-family: Arial, sans-serif;
-            background-color: #f5f8f7;
             color: #043f47;
             width: 100%;
             padding: 2rem;
@@ -164,91 +163,94 @@
     </div>
 
     <script>
-        // Format input with spaces as thousands separators
-        function formatInput(el) {
-            let v = el.value.replace(/\D/g, '');
-            if (!v) { el.value = ''; return; }
-            el.value = Number(v).toLocaleString('fr-FR');
-        }
 
-        function parseNumber(str) {
-            if (!str) return 0;
-            return Number(String(str).replace(/\s/g, '').replace(',', '.'));
-        }
 
-        function formatEuro(n) {
-            return Math.round(n).toLocaleString('fr-FR') + ' €';
-        }
+        (function () {
+            // Format input with spaces as thousands separators
+            function formatInput(el) {
+                let v = el.value.replace(/\D/g, '');
+                if (!v) { el.value = ''; return; }
+                el.value = Number(v).toLocaleString('fr-FR');
+            }
 
-        // Compute IFI progressively by tranches (marginal rates)
-        function calculIFIProgressif(patrimoine) {
-            // Tranches définies par Victor / barème IFI (en pourcentages)
-            // On utilise les bornes : seuil d'exonération 800 000 exclu en amont
-            const tranches = [
-                { min: 800000, max: 1300000, taux: 0.005 },
-                { min: 1300000, max: 2570000, taux: 0.007 },
-                { min: 2570000, max: 5000000, taux: 0.01 },
-                { min: 5000000, max: 10000000, taux: 0.0125 },
-                { min: 10000000, max: Infinity, taux: 0.015 }
-            ];
+            function parseNumber(str) {
+                if (!str) return 0;
+                return Number(String(str).replace(/\s/g, '').replace(',', '.'));
+            }
 
-            let ifi = 0;
-            for (const t of tranches) {
-                if (patrimoine > t.min) {
-                    const taxable = Math.min(patrimoine, t.max) - t.min;
-                    ifi += taxable * t.taux;
+            function formatEuro(n) {
+                return Math.round(n).toLocaleString('fr-FR') + ' €';
+            }
+
+            // Compute IFI progressively by tranches (marginal rates)
+            function calculIFIProgressif(patrimoine) {
+                // Tranches définies par Victor / barème IFI (en pourcentages)
+                // On utilise les bornes : seuil d'exonération 800 000 exclu en amont
+                const tranches = [
+                    { min: 800000, max: 1300000, taux: 0.005 },
+                    { min: 1300000, max: 2570000, taux: 0.007 },
+                    { min: 2570000, max: 5000000, taux: 0.01 },
+                    { min: 5000000, max: 10000000, taux: 0.0125 },
+                    { min: 10000000, max: Infinity, taux: 0.015 }
+                ];
+
+                let ifi = 0;
+                for (const t of tranches) {
+                    if (patrimoine > t.min) {
+                        const taxable = Math.min(patrimoine, t.max) - t.min;
+                        ifi += taxable * t.taux;
+                    }
                 }
-            }
-            return ifi;
-        }
-
-        function arrondiMillierSup(val) {
-            return Math.ceil(val / 1000) * 1000;
-        }
-
-        function calculerIFI() {
-            const raw = document.getElementById('patrimoine').value;
-            const patrimoine = parseNumber(raw);
-            const resultDiv = document.getElementById('result');
-
-            if (isNaN(patrimoine) || patrimoine <= 800000) {
-                resultDiv.innerHTML = `<p>Votre patrimoine est inférieur au seuil d’imposition IFI (800 000 €).</p>`;
-                resultDiv.style.display = 'block';
-                return;
+                return ifi;
             }
 
-            // Calcul IFI progressif
-            const ifi = calculIFIProgressif(patrimoine);
-            const ifiRounded = Math.round(ifi);
+            function arrondiMillierSup(val) {
+                return Math.ceil(val / 1000) * 1000;
+            }
 
-            // Don maximum : montant qui permet (dans l'idéal) d'annuler l'IFI = IFI / 0.75
-            // mais plafonné au plafond légal de réduction (66 667 € de don max déductible)
-            let donMax = ifi / 0.75;
-            if (donMax > 66667) donMax = 66667;
-            // Keep cents irrelevant; round to euros
-            donMax = Math.round(donMax);
+            function calculerIFI() {
+                const raw = document.getElementById('patrimoine').value;
+                const patrimoine = parseNumber(raw);
+                const resultDiv = document.getElementById('result');
 
-            // Variantes arrondies au millier supérieur
-            const don60 = arrondiMillierSup(donMax * 0.6);
-            const don25 = arrondiMillierSup(donMax * 0.25);
+                if (isNaN(patrimoine) || patrimoine <= 800000) {
+                    resultDiv.innerHTML = `<p>Votre patrimoine est inférieur au seuil d’imposition IFI (800 000 €).</p>`;
+                    resultDiv.style.display = 'block';
+                    return;
+                }
 
-            // Investissement (part déductible = 75% du don) => réduction IFI effective
-            const investMax = donMax * 0.75;
-            const invest60 = don60 * 0.75;
-            const invest25 = don25 * 0.75;
+                // Calcul IFI progressif
+                const ifi = calculIFIProgressif(patrimoine);
+                const ifiRounded = Math.round(ifi);
 
-            // Coût réel pour le donateur = 25% du don
-            const coutMax = donMax * 0.25;
-            const cout60 = don60 * 0.25;
-            const cout25 = don25 * 0.25;
+                // Don maximum : montant qui permet (dans l'idéal) d'annuler l'IFI = IFI / 0.75
+                // mais plafonné au plafond légal de réduction (66 667 € de don max déductible)
+                let donMax = ifi / 0.75;
+                if (donMax > 66667) donMax = 66667;
+                // Keep cents irrelevant; round to euros
+                donMax = Math.round(donMax);
 
-            // IFI restant après chaque don (ne peut pas être négatif)
-            const ifiApresMax = Math.max(0, ifi - investMax);
-            const ifiApres60 = Math.max(0, ifi - invest60);
-            const ifiApres25 = Math.max(0, ifi - invest25);
+                // Variantes arrondies au millier supérieur
+                const don60 = arrondiMillierSup(donMax * 0.6);
+                const don25 = arrondiMillierSup(donMax * 0.25);
 
-            // Affichage avec wording exact demandé (a / b / c)
-            resultDiv.innerHTML = `
+                // Investissement (part déductible = 75% du don) => réduction IFI effective
+                const investMax = donMax * 0.75;
+                const invest60 = don60 * 0.75;
+                const invest25 = don25 * 0.75;
+
+                // Coût réel pour le donateur = 25% du don
+                const coutMax = donMax * 0.25;
+                const cout60 = don60 * 0.25;
+                const cout25 = don25 * 0.25;
+
+                // IFI restant après chaque don (ne peut pas être négatif)
+                const ifiApresMax = Math.max(0, ifi - investMax);
+                const ifiApres60 = Math.max(0, ifi - invest60);
+                const ifiApres25 = Math.max(0, ifi - invest25);
+
+                // Affichage avec wording exact demandé (a / b / c)
+                resultDiv.innerHTML = `
     <p><strong>Montant estimé de votre IFI avant don :</strong> ${formatEuro(ifiRounded)}</p>
     <hr>
 
@@ -279,19 +281,20 @@
 `;
 
 
-            resultDiv.style.display = 'block';
+                resultDiv.style.display = 'block';
 
-            // Ajout de l'écouteur après le rendu du bouton
-            newsletterBtn.onclick = function () {
-                const emailField = document.getElementById('email');
-                if (emailField) {
-                    emailField.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    // Optionnel : mettre le focus automatiquement
-                    setTimeout(() => emailField.focus(), 500);
-                }
-            };
+                // Ajout de l'écouteur après le rendu du bouton
+                newsletterBtn.onclick = function () {
+                    const emailField = document.getElementById('email');
+                    if (emailField) {
+                        emailField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        // Optionnel : mettre le focus automatiquement
+                        setTimeout(() => emailField.focus(), 500);
+                    }
+                };
 
-        }
+            }
+        })();
     </script>
 
 
